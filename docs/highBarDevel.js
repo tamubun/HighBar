@@ -13,7 +13,11 @@ import { gymnast } from './gymnast.js';
    z軸: 前後方向。後(手前)方向が +。*/
 
 let debug = location.hash == '#debug';
+let dislo = location.hash == '#dislo'; // 肩再脱臼時のともえの実験用
 let av; // デバッグ用矢印。
+let shoulder_force_arrow = [null, null]; // dislo用
+let shoulder_feedback = [null, null]; // 同上
+let shoulder_force_record = []; // 同上
 
 const rad_per_deg = Math.PI/180;
 const L = 0;
@@ -32,7 +36,8 @@ const gui_params = {};
 const color_params_keys = ['肌の色',  '色1', '色2', '長パン'];
 
 /* ページリロードした時の構成 */
-const first_composition = ['後振り下し', '車輪', '車輪'];
+const first_composition =
+      !dislo ? ['後振り下し', '車輪', '車輪'] : ['立ち', 'ともえ(脱臼)'];
 
 /* マウスイベントとタッチイベント両方が起きないようにする。
    タッチイベントが来たら、event.preventDefault()を出す、とか色々試したが、
@@ -340,6 +345,17 @@ function updown(ev) {
       blur.blur();
     }
 
+    if ( dislo ) {
+      /* 地面蹴ってジャンプうまく出来なかったので、無理矢理初速を付ける。
+         多分このせいで開始しばらくは肩に変な力が掛かっている */
+      for ( let part of gymnast.body_parts ) {
+        if ( current_waza() == 'ともえ' )
+          part.setLinearVelocity(new Ammo.btVector3(0,-1,5));
+        else // ともえ(脱臼) 少し後ろ向きに飛ぶ
+          part.setLinearVelocity(new Ammo.btVector3(0,-0.4,5.5));
+      }
+    }
+
     setAdjustableForces();
     enableHelper(false);
     startRecording();
@@ -434,7 +450,7 @@ function keyevent(ev) {
   case 80: // 'P'
   case 112: // 'p'
     // 色々な状態で正しく動作するか確認してないので、デバッグモード専用。
-    if ( !debug )
+    if ( !debug && !dislo )
       break;
     if ( ev.type != 'keydown' )
       break;
@@ -1119,6 +1135,18 @@ function createObjects() {
      GUIで調整できる力は、setAdjustableForces()の中で定める。
      腰の関節は、初期状態に持っていく時にいじるので、状態遷移の時に定める */
   setAdjustableForces();
+
+  if ( dislo ) {
+    for ( let lr=L; lr <= R; ++lr) {
+      shoulder_force_arrow[lr] = new THREE.ArrowHelper(
+        new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0),2, 0xff0000);
+      gymnast.body.upper_arm[lr].three.add(shoulder_force_arrow[lr]);
+
+      shoulder_feedback[lr] = new Ammo.btJointFeedback()
+      gymnast.joint.shoulder[lr].setJointFeedback(shoulder_feedback[lr]);
+      gymnast.joint.shoulder[lr].enableFeedback(true);
+    }
+  }
 }
 
 bar.create = function() {
@@ -1634,6 +1662,22 @@ function animate() {
   control.update();
   bar.draw(); // バーをしなったように見せる
 
+  if ( dislo ) {
+    let f_mean = 0.0;
+    for ( let lr = L; lr <= R; ++lr ) {
+      let f = shoulder_feedback[lr].m_appliedForceBodyB;
+      f_mean += f.length() * 0.5;
+      setDebugArrow(
+        shoulder_force_arrow[lr],
+        new THREE.Vector3(0,0,0),
+        new THREE.Vector3(f.x()/200, f.y()/200, f.z()/200),
+        false
+      );
+    }
+    if ( state.main == 'run' )
+      shoulder_force_record.push([clock.getElapsedTime(), f_mean]);
+  }
+
   renderer.render(scene, camera);
 }
 
@@ -1877,8 +1921,9 @@ function applyLandingForce() {
   }
 }
 
-function setDebugArrow(arrow, pos, vec) {
-  scene.add(arrow);
+function setDebugArrow(arrow, pos, vec, add_scene=true) {
+  if ( add_scene )
+    scene.add(arrow);
 
   let v = vec.clone(),
       len = v.length() / 2;
@@ -1946,7 +1991,22 @@ function doReset() {
   state.main = 'reset';
 }
 
+function outputDisloLog() {
+  if ( shoulder_force_record.length > 0 ) {
+    let s = '', time0 = shoulder_force_record[0][0];
+    for ( let r of shoulder_force_record ) {
+      r[0] -= time0;
+      s += r + '\n'
+    }
+    console.log(s);
+    shoulder_force_record = [];
+  }
+}
+
 function doResetMain() {
+  if ( dislo )
+    outputDisloLog();
+
   /* start-posが変ってここに来る時には、helper_jointが付いたままになっている。
      一度外さないと、start-posが変わる度に helper_jointが一つづつ増えていく */
   enableHelper(false);
