@@ -351,7 +351,7 @@ function updown(ev) {
       for ( let part of gymnast.body_parts ) {
         if ( current_waza() == 'ともえ' )
           part.setLinearVelocity(new Ammo.btVector3(0,-1,5));
-        else // ともえ(脱臼) 少し後ろ向きに飛ぶ
+        else if ( current_waza() == 'ともえ(脱臼)' ) // 少し後ろ向きに跳ぶ
           part.setLinearVelocity(new Ammo.btVector3(0,-0.4,5.5));
       }
     }
