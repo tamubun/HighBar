@@ -1663,7 +1663,7 @@ function animate() {
   bar.draw(); // バーをしなったように見せる
 
   if ( dislo ) {
-    let f_sum = new Ammo.btVector3();
+    let f_sum = new Ammo.btVector3(), ang;
     for ( let lr = L; lr <= R; ++lr ) {
       let f = shoulder_feedback[lr].m_appliedForceBodyB;
       f_sum.op_add(f);
@@ -1674,8 +1674,10 @@ function animate() {
         false
       );
     }
+    ang = Math.atan2(f_sum.z(), f_sum.y()) / rad_per_deg;
     if ( state.main == 'run' )
-      shoulder_force_record.push([clock.getElapsedTime(), f_sum.length()/2]);
+      shoulder_force_record.push(
+        [clock.getElapsedTime(), f_sum.length()/2, ang]);
   }
 
   renderer.render(scene, camera);
